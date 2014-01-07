@@ -30,7 +30,7 @@
 -behaviour(nksip_sipapp).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([init/1, get_user_pass/4, authorize/4, route/6, handle_call/3]).
+-export([init/1, get_user_pass/3, authorize/4, route/6, handle_call/3]).
 
 
 
@@ -52,9 +52,10 @@ init([Id]) ->
 %%
 %% If the incoming user's realm is "nksip", the password for any user is "1234". 
 %% For other realms, no password is valid.
-get_user_pass(_User, <<"nksip">>, _From, State) -> 
+%%
+get_user_pass(_User, <<"nksip">>, State) -> 
     {reply, <<"1234">>, State};
-get_user_pass(_User, _Realm, _From, State) -> 
+get_user_pass(_User, _Realm, State) -> 
     {reply, false, State}.
 
 
@@ -74,12 +75,13 @@ get_user_pass(_User, _Realm, _From, State) ->
 %%
 %% 4) If no digest header is present, reply with a 407 response sending 
 %%    a challenge to the user.
-authorize(Auth, _ReqId, _From, State) ->
+%%
+authorize(_ReqId, Auth, _From, State) ->
     case lists:member(dialog, Auth) orelse lists:member(register, Auth) of
         true -> 
             {reply, true, State};
         false ->
-            case nksip_lib:get_value({digest, <<"nksip">>}, Auth) of
+            case proplists:get_value({digest, <<"nksip">>}, Auth) of
                 true -> 
                     {reply, true, State};       % Password is valid
                 false -> 
@@ -99,19 +101,20 @@ authorize(Auth, _ReqId, _From, State) ->
 %%
 %% - If it has user part, and domain is "nksip", find if it is registered and proxy.
 %%   For other domain, proxy the request.
-route(_Scheme, <<>>, Domain, ReqId, _From, State) ->
+%%
+route(ReqId, _Scheme, <<>>, Domain, _From, #state{id=AppId}=State) ->
     Reply = case Domain of
         <<"nksip">> ->
             process;
         _ ->
-            case nksip_request:is_local_route(ReqId) of
+            case nksip_request:is_local_route(AppId, ReqId) of
                 true -> process;
                 false -> proxy
             end
     end,
     {reply, Reply, State};
 
-route(Scheme, User, Domain, _ReqId, _From, #state{id=Id}=State) ->
+route(_ReqId, Scheme, User, Domain, _From, #state{id=Id}=State) ->
     Reply = case Domain of
         <<"nksip">> ->
             UriList = nksip_registrar:find(Id, Scheme, User, <<"nksip">>),

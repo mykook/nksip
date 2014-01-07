@@ -25,7 +25,7 @@
 -behaviour(nksip_sipapp).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([init/1, invite/4, options/3]).
+-export([init/1, invite/4, options/4]).
 
 %% ===================================================================
 %% Callbacks
@@ -44,12 +44,12 @@ init([Id]) ->
 %% If the request has a SDP body, reply 180 Ringing, wait 2 seconds and reply 
 %% 200 Ok with the same body (spawns a new process to avoid blocking the process).
 %% If not, reply 488 Not Acceptable with a Warning header.
-invite(_DialogId, ReqId, From, State) ->
-    SDP = nksip_request:body(ReqId),
+invite(ReqId, Meta, From, #state{id=AppId}=State) ->
+    SDP = nksip_lib:get_value(body, Meta),
     case nksip_sdp:is_sdp(SDP) of
         true ->
             Fun = fun() ->
-                nksip_request:provisional_reply(ReqId, ringing),
+                nksip_request:reply(AppId, ReqId, ringing),
                 timer:sleep(2000),
                 nksip:reply(From, {ok, [], SDP})
             end,
@@ -62,7 +62,7 @@ invite(_DialogId, ReqId, From, State) ->
 
 %% @doc Called when an OPTIONS is received.
 %% Reply 200 Ok with a custom header and some options.
-options(_ReqId, _From, #state{id=Id}=State) ->
+options(_ReqId, _Meta, _From, #state{id=Id}=State) ->
     Headers = [{"NkSip-Id", Id}],
     Opts = [make_contact, make_allow, make_accept, make_supported],
     {reply, {ok, Headers, <<>>, Opts}, State}.
